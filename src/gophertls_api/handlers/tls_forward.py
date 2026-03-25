@@ -75,11 +75,7 @@ async def tls_forward(request: Request) -> Response:
     except Exception:
         return _error_response("error while doing request")
 
-    if debug:
-        logger.warning(
-            "upstream result status=%d resp_headers=%d cookies=%d",
-            result.status_code,
-            len(result.headers),
-            len(result.cookies),
-        )
+    print(result.status_code)
+    print(result.headers)
+    print(result.cookies)
     return _build_response(result)
