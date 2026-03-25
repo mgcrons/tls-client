@@ -43,6 +43,7 @@ def execute_upstream(config: TlsForwardConfig) -> UpstreamResult:
     Raises:
         Exception: on network/TLS/curl failures (wrapped by the handler).
     """
+    print(config)
     curl_options = {CurlOpt.HTTP2_PSEUDO_HEADERS_ORDER: config.pseudo_headers_curl}
     extra_fp = ExtraFingerprints(
         tls_permute_extensions=config.with_random_extension_order
@@ -72,6 +73,9 @@ def execute_upstream(config: TlsForwardConfig) -> UpstreamResult:
     body = upstream_body_bytes(resp)
     header_map = _response_headers_map(resp.headers)
     cookie_tuple = tuple(resp.cookies.jar)
+    print(resp.status_code)
+    print(resp.headers)
+    print(resp.cookies)
 
     return UpstreamResult(
         status_code=resp.status_code,
