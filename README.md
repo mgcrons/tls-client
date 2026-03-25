@@ -55,8 +55,8 @@ python -m gophertls_api.main
 ## API
 
 - Endpoint: `POST /go/pher`
-- Required headers: `x-tls-url`, `x-tls-method`, `x-tls-profile`, `x-tls-header-order`, `x-tls-pseudo-order`
-- Optional headers: `x-tls-proxy`, `x-tls-timeout`, `x-tls-follow-redirects`, `x-tls-force-h1`, `x-tls-insecure-skip-verify`, `x-tls-with-random-extension-order`
+- Required headers: `x-tls-url`, `x-tls-method`, `x-tls-profile`, `x-tls-header-order`
+- Optional headers: `x-tls-proxy`, `x-tls-timeout`, `x-tls-follow-redirects`, `x-tls-force-h1`, `x-tls-insecure-skip-verify`, `x-tls-with-random-extension-order`, `x-tls-pseudo-order`, `x-tls-debug-cookies`, `x-tls-verbose-curl`
 
 ## Profile Mapping
 
@@ -73,7 +73,10 @@ Raw `curl_cffi` targets (e.g. `chrome136`) are also accepted directly.
 
 ## Parity Notes
 
-- `x-tls-pseudo-order`: applied via `HTTP2_PSEUDO_HEADERS_ORDER`.
+- `x-tls-pseudo-order`: applied via `HTTP2_PSEUDO_HEADERS_ORDER` (optional; overrides profile when present).
 - `x-tls-header-order`: preserved best-effort from incoming header order.
 - `x-tls-with-random-extension-order`: mapped to `ExtraFingerprints(tls_permute_extensions=...)`.
 - Fingerprint output is close but not bit-identical to bogdanfinn/tls-client.
+- Debugging helpers:
+  - `x-tls-debug-cookies`: prints upstream `Set-Cookie` headers and cookie jar contents.
+  - `x-tls-verbose-curl`: enables `curl_cffi` verbose logging (`CurlOpt.VERBOSE`).

@@ -44,24 +44,33 @@ def execute_upstream(config: TlsForwardConfig) -> UpstreamResult:
     Raises:
         Exception: on network/TLS/curl failures (wrapped by the handler).
     """
-    print(config)
-    curl_options = {CurlOpt.HTTP2_PSEUDO_HEADERS_ORDER: config.pseudo_headers_curl}
-    extra_fp = ExtraFingerprints(
-        tls_permute_extensions=config.with_random_extension_order
+    curl_options: dict[CurlOpt, object] = {}
+    if config.pseudo_headers_curl is not None:
+        curl_options[CurlOpt.HTTP2_PSEUDO_HEADERS_ORDER] = config.pseudo_headers_curl
+
+    extra_fp = (
+        ExtraFingerprints(tls_permute_extensions=config.with_random_extension_order)
+        if config.with_random_extension_order is not None
+        else None
     )
     http_version = CurlHttpVersion.V1_1 if config.force_http1 else None
 
-    with Session(
-        verify=not config.insecure_skip_verify,
-        timeout=config.timeout_seconds,
-        allow_redirects=config.follow_redirects,
-        impersonate=config.impersonate,  # type: ignore[arg-type]
-        proxy=config.proxy,
-        http_version=http_version,
-        curl_options=curl_options,
-        extra_fp=extra_fp,
-        default_headers=False,
-    ) as session:
+    session_kwargs: dict[str, object] = {
+        "verify": not config.insecure_skip_verify,
+        "timeout": config.timeout_seconds,
+        "allow_redirects": config.follow_redirects,
+        "impersonate": config.impersonate,  # type: ignore[arg-type]
+        "proxy": config.proxy,
+        "http_version": http_version,
+        "curl_options": curl_options,
+    }
+    if extra_fp is not None:
+        session_kwargs["extra_fp"] = extra_fp
+
+    if config.verbose_curl:
+        curl_options[CurlOpt.VERBOSE] = 1
+
+    with Session(**session_kwargs) as session:
         resp = session.request(
             config.request_method,  # type: ignore[arg-type]
             config.request_url,
@@ -74,11 +83,11 @@ def execute_upstream(config: TlsForwardConfig) -> UpstreamResult:
     header_map = _response_headers_map(resp.headers)
     set_cookie_headers = tuple(resp.headers.get_list("set-cookie"))
     cookie_tuple = tuple(resp.cookies.jar)
-    print(resp.status_code)
-    print(resp.headers)
-    print(resp.cookies)
-    print(set_cookie_headers)
-    print(cookie_tuple)
+
+    if config.debug_cookies:
+        # Keep this intentionally compact; cookie jars can be large.
+        print("DEBUG set-cookie:", set_cookie_headers)
+        print("DEBUG cookie-jar-count:", len(cookie_tuple))
 
     return UpstreamResult(
         status_code=resp.status_code,

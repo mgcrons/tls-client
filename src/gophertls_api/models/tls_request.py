@@ -25,6 +25,8 @@ TLS_INSECURE = "x-tls-insecure-skip-verify"
 TLS_RANDOM_EXT = "x-tls-with-random-extension-order"
 TLS_HEADER_ORDER = "x-tls-header-order"
 TLS_PSEUDO_ORDER = "x-tls-pseudo-order"
+TLS_DEBUG_COOKIES = "x-tls-debug-cookies"
+TLS_VERBOSE_CURL = "x-tls-verbose-curl"
 
 PSEUDO_MAP = {
     ":method": "m",
@@ -48,12 +50,25 @@ class TlsForwardConfig:
     follow_redirects: bool
     force_http1: bool
     insecure_skip_verify: bool
-    with_random_extension_order: bool
-    pseudo_headers_curl: str
+    # When None, execute_upstream should not override
+    # curl_cffi fingerprint settings.
+    with_random_extension_order: bool | None
+    pseudo_headers_curl: str | None
+    debug_cookies: bool
+    verbose_curl: bool
 
 
 def _get_header(request: Request, name: str) -> str:
     return (request.headers.get(name) or "").strip()
+
+
+def _get_optional_header(request: Request, name: str) -> str | None:
+    """Return stripped header value, or None if the header is absent/empty."""
+    raw = request.headers.get(name)
+    if raw is None:
+        return None
+    text = raw.strip()
+    return text or None
 
 
 def _parse_bool(raw: str, default: str, field: str) -> bool:
@@ -73,6 +88,13 @@ def _parse_comma_list(raw: str, field: str) -> list[str]:
     return items
 
 
+def _parse_bool_optional(raw: str | None, default: bool, field: str) -> bool:
+    """Parse optional boolean header values."""
+    if raw is None:
+        return default
+    return _parse_bool(raw, "true" if default else "false", field)
+
+
 def _parse_pseudo_order(raw: str) -> str:
     order = []
     for item in _parse_comma_list(raw, "pseudo header order"):
@@ -90,9 +112,9 @@ def build_forward_headers(
     """
     Strip x-tls/meta headers and enforce preferred order first.
 
-    Note: in ASGI, header names are provided lower-cased. To preserve user-provided
-    casing for ordered headers, we use the original tokens from `preferred_order`
-    when emitting headers.
+    Note: in ASGI, header names are provided lower-cased. To preserve
+    user-provided casing for ordered headers, we use the original tokens from
+    `preferred_order` when emitting headers.
     """
     skip_content_type = method in METHODS_WITHOUT_BODY
     canonical_names: dict[str, str] = {}
@@ -118,7 +140,9 @@ def build_forward_headers(
             continue
         if lower_key not in canonical_names:
             canonical_names[lower_key] = key
-        groups.setdefault(lower_key, []).append((canonical_names[lower_key], value))
+        groups.setdefault(lower_key, []).append(
+            (canonical_names[lower_key], value)
+        )
 
     ordered: list[tuple[str, str]] = []
     used: set[str] = set()
@@ -169,23 +193,38 @@ async def parse_tls_forward_request(request: Request) -> TlsForwardConfig:
     follow_redirects = _parse_bool(
         _get_header(request, TLS_FOLLOW_REDIRECTS), "true", "follow redirects"
     )
-    force_http1 = _parse_bool(_get_header(request, TLS_FORCE_H1), "false", "force http/1.1")
+    force_http1 = _parse_bool(
+        _get_header(request, TLS_FORCE_H1),
+        "false",
+        "force http/1.1",
+    )
     insecure_skip_verify = _parse_bool(
         _get_header(request, TLS_INSECURE), "false", "insecure skip verify"
     )
-    with_random_extension_order = _parse_bool(
-        _get_header(request, TLS_RANDOM_EXT), "true", "random extension order"
+    random_ext_raw = _get_optional_header(request, TLS_RANDOM_EXT)
+    with_random_extension_order = (
+        _parse_bool(random_ext_raw, "true", "random extension order")
+        if random_ext_raw is not None
+        else None
     )
+
+    debug_cookies_raw = _get_optional_header(request, TLS_DEBUG_COOKIES)
+    debug_cookies = _parse_bool_optional(
+        debug_cookies_raw, False, "debug cookies"
+    )
+
+    verbose_curl_raw = _get_optional_header(request, TLS_VERBOSE_CURL)
+    verbose_curl = _parse_bool_optional(verbose_curl_raw, False, "verbose curl")
 
     header_order_raw = _get_header(request, TLS_HEADER_ORDER)
     if not header_order_raw:
         raise ValueError(f"no {TLS_HEADER_ORDER}")
     header_order = _parse_comma_list(header_order_raw, "header order")
 
-    pseudo_order_raw = _get_header(request, TLS_PSEUDO_ORDER)
-    if not pseudo_order_raw:
-        raise ValueError(f"no {TLS_PSEUDO_ORDER}")
-    pseudo_headers_curl = _parse_pseudo_order(pseudo_order_raw)
+    pseudo_order_raw = _get_optional_header(request, TLS_PSEUDO_ORDER)
+    pseudo_headers_curl = (
+        _parse_pseudo_order(pseudo_order_raw) if pseudo_order_raw else None
+    )
 
     body = await request.body()
     if method in METHODS_WITHOUT_BODY:
@@ -195,7 +234,9 @@ async def parse_tls_forward_request(request: Request) -> TlsForwardConfig:
         (key.decode("latin-1"), value.decode("latin-1"))
         for key, value in request.scope.get("headers", [])
     ]
-    forward_headers = build_forward_headers(incoming_headers, header_order, method)
+    forward_headers = build_forward_headers(
+        incoming_headers, header_order, method
+    )
 
     return TlsForwardConfig(
         request_url=request_url,
@@ -210,4 +251,6 @@ async def parse_tls_forward_request(request: Request) -> TlsForwardConfig:
         insecure_skip_verify=insecure_skip_verify,
         with_random_extension_order=with_random_extension_order,
         pseudo_headers_curl=pseudo_headers_curl,
+        debug_cookies=debug_cookies,
+        verbose_curl=verbose_curl,
     )

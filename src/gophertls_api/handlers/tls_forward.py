@@ -48,7 +48,9 @@ async def tls_forward(request: Request) -> Response:
     except Exception:
         return _error_response("error while doing request")
 
-    print(result.status_code)
-    print(result.headers)
-    print(result.set_cookie_headers)
+    if config.debug_cookies:
+        print("DEBUG upstream-status:", result.status_code)
+        print("DEBUG upstream-headers:", result.headers)
+        print("DEBUG upstream-set-cookie-headers:", result.set_cookie_headers)
+        print("DEBUG upstream-cookie-jar:", result.cookies)
     return _build_response(result)
