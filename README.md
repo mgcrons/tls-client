@@ -11,6 +11,32 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+## Install (Windows)
+
+PowerShell:
+
+```powershell
+cd python
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+Command Prompt (cmd):
+
+```bat
+cd python
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e .
+```
+
+## Run (Windows)
+
+```powershell
+python -m gophertls_api.main
+```
+
 ## Run
 
 Create `.env` in repository root or `python/`:

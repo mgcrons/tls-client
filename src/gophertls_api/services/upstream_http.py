@@ -66,6 +66,7 @@ def execute_upstream(config: TlsForwardConfig) -> UpstreamResult:
             headers=config.forward_headers,
             data=config.request_body if config.request_body else None,
             timeout=config.timeout_seconds,
+            
         )
 
     body = upstream_body_bytes(resp)

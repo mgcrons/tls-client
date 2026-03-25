@@ -87,10 +87,24 @@ def build_forward_headers(
     preferred_order: list[str],
     method: str,
 ) -> list[tuple[str, str]]:
-    """Strip x-tls/meta headers and enforce preferred order first."""
+    """
+    Strip x-tls/meta headers and enforce preferred order first.
+
+    Note: in ASGI, header names are provided lower-cased. To preserve user-provided
+    casing for ordered headers, we use the original tokens from `preferred_order`
+    when emitting headers.
+    """
     skip_content_type = method in METHODS_WITHOUT_BODY
     canonical_names: dict[str, str] = {}
     groups: OrderedDict[str, list[tuple[str, str]]] = OrderedDict()
+
+    # Map normalized header name -> user-provided casing token.
+    order_display: dict[str, str] = {}
+    for token in preferred_order:
+        cleaned = token.strip()
+        if not cleaned:
+            continue
+        order_display.setdefault(cleaned.lower(), cleaned)
 
     for key, value in incoming_headers:
         lower_key = key.lower()
@@ -108,10 +122,13 @@ def build_forward_headers(
 
     ordered: list[tuple[str, str]] = []
     used: set[str] = set()
-    for key in (item.lower() for item in preferred_order):
-        if key in groups:
-            ordered.extend(groups[key])
-            used.add(key)
+    for token in preferred_order:
+        lk = token.lower()
+        if lk in groups:
+            display_key = order_display.get(lk, canonical_names.get(lk, lk))
+            # Emit all occurrences using the ordered header's display casing.
+            ordered.extend([(display_key, v) for _, v in groups[lk]])
+            used.add(lk)
 
     for key, values in groups.items():
         if key not in used:
