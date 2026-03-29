@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 
 from gophertls_api.profiles.map import resolve_impersonate
-from gophertls_api.utils.proxy import format_proxy
+from gophertls_api.utils.proxy import format_proxy, parse_proxy_type
 
 METHODS_WITHOUT_BODY = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 SUPPORTED_METHODS = METHODS_WITHOUT_BODY | {"POST", "PUT", "PATCH", "DELETE"}
@@ -17,6 +17,7 @@ SUPPORTED_METHODS = METHODS_WITHOUT_BODY | {"POST", "PUT", "PATCH", "DELETE"}
 TLS_URL = "x-tls-url"
 TLS_METHOD = "x-tls-method"
 TLS_PROXY = "x-tls-proxy"
+TLS_PROXY_TYPE = "x-tls-proxy-type"
 TLS_PROFILE = "x-tls-profile"
 TLS_TIMEOUT = "x-tls-timeout"
 TLS_FOLLOW_REDIRECTS = "x-tls-follow-redirects"
@@ -182,7 +183,11 @@ async def parse_tls_forward_request(request: Request) -> TlsForwardConfig:
     impersonate = resolve_impersonate(profile)
 
     proxy_raw = _get_header(request, TLS_PROXY)
-    proxy = format_proxy(proxy_raw) if proxy_raw else None
+    if proxy_raw:
+        proxy_kind = parse_proxy_type(_get_header(request, TLS_PROXY_TYPE))
+        proxy = format_proxy(proxy_raw, proxy_kind)
+    else:
+        proxy = None
 
     timeout_raw = _get_header(request, TLS_TIMEOUT) or "30"
     try:
